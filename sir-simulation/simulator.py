@@ -1,7 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import random
-
+import argparse
 def random_graph(N, E):
     '''
     Creates adjacency list representation of a random graph with N nodes and E edges
@@ -36,7 +36,6 @@ def simulate(N, E, S, I, R, t_i, T, p):
     '''
     G = (random_graph(N, E))
     V = list(G.keys())
-    print (V)
     states = {}
     infected = []
     s_states = [S]
@@ -61,7 +60,6 @@ def simulate(N, E, S, I, R, t_i, T, p):
         if random_person not in states:
             states[random_person] = 0
             i += 1
-    print (states)
     for t in range(T): # TODO: for large N and T this would be slow, percolation?
         for infected_person in infected:
             states[infected_person] -= 1
@@ -83,24 +81,21 @@ def simulate(N, E, S, I, R, t_i, T, p):
 
 
 if __name__ == "__main__":
-    N = 1000  # number of people/nodes
+    parser = argparse.ArgumentParser(description='Simulate with parameters.')
+    parser.add_argument('N', metavar="N", type=int, nargs=1,default=1000,help="number of people")
+    parser.add_argument('E', metavar="E", type=int, nargs=1, default=800, help="number of contacts")
+    parser.add_argument('S', metavar="S", type=int, nargs=1, default=975, help="number of initially susceptible people")
+    parser.add_argument('I', metavar="I", type=int, nargs=1, default=25, help="number of initially infected people")
+    parser.add_argument('R', metavar="R", type=int, nargs=1, default=0, help="number of initially removed people")
+    parser.add_argument('p', metavar="p", type=float, nargs=1, default=0.6, help="probability of transmission between two people in contact")
+    parser.add_argument('t_i', metavar="t_i", type=int, nargs=1, default=22, help="time steps between infection and removal")
+    parser.add_argument('T', metavar="T", type=int, nargs=1, default=75, help="total days simulated")
 
-    E = 900  # number of contacts (arbitrary)
-
-    S = 995  # number of people initially in the S state
-
-    I = 5  # number of people initially in the I state
-
-    R = 0  # number of people initially in the R state
-
-    p = 0.6
-
-    t_i = 22
-
-    T = 80
-    time_states = [i for i in range(T)]
+    args = parser.parse_args()
+    assert args.N[0] == args.I[0] + args.S[0] + args.R[0], "S+I+R must equal N"
+    time_states = [i for i in range(args.T[0])]
     time_states = [0] + time_states
-    states = simulate(N, E, S, I, R, t_i, T, p)
+    states = simulate(args.N[0], args.E[0], args.S[0], args.I[0], args.R[0], args.t_i[0], args.T[0], args.p[0])
 
     plt.plot(time_states, states[0], label='susceptible')
     plt.plot(time_states, states[1], label='infected')
