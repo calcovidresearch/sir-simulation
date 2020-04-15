@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import random
 import matplotlib.lines as mlines
 
+import argparse
 
 def draw_graph(G):
     '''
@@ -235,6 +236,7 @@ def initialize_state():
     plt.plot(time_steps, lines[4], label="dead")
     plt.legend()
     plt.show()
+
 
 
 if __name__ == "__main__":
