@@ -41,7 +41,9 @@ def show_graph(G, pos):
 
     plt.legend(handles=[S_legend, A_legend, I_legend, R_legend, D_legend], loc=0)
     plt.axis('off')
-    plt.show()
+    plt.show(block=False)
+    plt.pause(.5)
+    plt.close()
 
 def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy):
     '''
