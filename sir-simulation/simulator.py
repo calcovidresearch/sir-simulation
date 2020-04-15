@@ -1,7 +1,8 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import random
-import argparse
+import matplotlib.lines as mlines
+
 
 def draw_graph(G):
     '''
@@ -21,48 +22,35 @@ def random_graph(N, E):
     G = nx.gnm_random_graph(N, E)
     draw_graph(G)
     return nx.convert.to_dict_of_dicts(G)
-class Person:
-    def __init__(self, ageFunction=random.random, underlying_condition=False, time_of_infection = -1, time_of_removal = -1, contacts={}, state="S", dead=False):
-        self.age = ageFunction()
-        self.state = state
-        self.underlying_condition = underlying_condition
-        self.time_of_infection = time_of_infection
-        self.time_of_removal = time_of_removal
-        self.contacts = contacts
-        self.dead = dead
-    def age(self):
-        return self.age
-    def has_underlying_condition(self):
-        return self.underlying_condition
-    def time_of_infection(self):
-        return self.time_of_infection()
-    def getContacts(self):
-        return self.contacts
-    def time_of_removal(self):
-        return self.time_of_removal
-    def getState(self):
-        return self.state
-    def setState(self, new):
-        self.state = new
-    def isDead(self):
-        return self.dead
-    def setDead(self):
-        self.dead = True
+def show_graph(G, pos):
+    mapping = {'S': 'blue', 'I': 'green', 'A': 'orange', 'R': 'red', 'D': 'purple'}
+    nodes = G.nodes()
+    colors = [mapping[G.nodes[n]['state']] for n in nodes]
 
 
-def simulate_corona(model_state, T, a_i, a_r, die, policy):
+
+    ec = nx.draw_networkx_edges(G, pos, alpha=0.2)
+    nc = nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors,
+                                with_labels=False, node_size=100)
+    S_legend = mlines.Line2D([], [], color='blue', marker='o', markersize=10,linewidth=0,label='susceptible')
+    A_legend = mlines.Line2D([], [], color='orange', marker='o',markerSize=10, linewidth=0, label='asymptomatic')
+    I_legend = mlines.Line2D([], [], color='green',marker='o', markerSize=10, linewidth=0, label='infected')
+    R_legend = mlines.Line2D([], [], color='red',marker='o', markerSize=10, linewidth=0, label='recovered')
+    D_legend = mlines.Line2D([], [], color='purple',marker='o', markerSize=10, linewidth=0, label='dead')
+
+    plt.legend(handles=[S_legend, A_legend, I_legend, R_legend, D_legend], loc=0)
+    plt.axis('off')
+    plt.show()
+
+def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy):
     '''
         Randomly simulate spread of the Coronavirus.
-            model_state: dictionary of all the state variables
-                G: contact graph
-                R_state_list: list of people obj's in the R state
-                S_state_list: list of people obj's in the S state
-                I_state_list: list of people obj's in the I state
-                A_state_list: list of people obj's in the A state
-                D_state_list: list of people obj's in the that are dead
-                people: dictionary of people objects {vector : people obj}
-                deaths : list of dead people obj's
-                s_a: dictionary of probabilities an s node will become an a node given a contact
+            G
+            S
+            A
+            I
+            R
+            D
             T: timesteps
             a_i(people_obj): returns a probability that an a node transitions to the I state
             a_r(people_obj): returns a probability that a node transitions to the R state
@@ -70,51 +58,63 @@ def simulate_corona(model_state, T, a_i, a_r, die, policy):
             policy : policy function to be performed every epoch/timestep
 
     '''
-    deathCounts = [len(model_state["D_state_list"])]
-    S_counts = [len(model_state["S_state_list"])]
-    A_counts = [len(model_state["A_state_list"])]
-    I_counts = [len(model_state["I_state_list"])]
-    R_counts = [len(model_state["R_state_list"])]
-    D_counts = [len(model_state["D_state_list"])]
+    D_counts = [D]
+    S_counts = [S]
+    A_counts = [A]
+    I_counts = [I]
+    R_counts = [R]
+    pos = nx.spring_layout(G, dim=2, k=None, pos=None, fixed=None, iterations=50, weight='weight', scale=1.0)
+
     for t in range(1, T+1):
         seen = set()
-        for vertex in model_state["people"].keys():
-            person = model_state["people"][vertex]
-            contacts = []
-            for neighbor in getNeighbors(G, vertex):
+        show_graph(G, pos)
+        for node in G.nodes():
 
-                if person.getState() == "A" or person.getState() == "I" and person not in seen:
-                    if neighbor.getState() == "S" and random.random() < model_state["s_a"][neighbor][vertex]:
-                        neighbor.setState("A")
+            person = G.nodes[node]
+            for neighbor in G[node]:
+                if node not in seen:
+
+                    if G.nodes[neighbor]['state'] =='S' and (person["state"] == "I" or person["state"] == "A") and random.random() < G[node][neighbor]['weight']:
+                        G.nodes[neighbor]['state'] = 'A'
+                        A+=1
+                        S-=1
                         seen.add(neighbor)
-                        model_state["S_state_list"].remove(neighbor)
-                        model_state["A_state_list"].append(neighbor)
 
-                contacts.append(neighbor)
-            probability_of_death = die(person)
-            if person.getState() == "A" and random.random() < probability_of_death:
-                model_state['A_state_list'].remove(vertex)
-                person.setDead()
-                model_state['D_state_list'].append(vertex)
-            if person.getState() == "I" and random.random() < probability_of_death:
-                model_state['I_state_list'].remove(vertex)
-                model_state['D_state_list'].append(vertex)
+            death_flip = random.random()
+            removal_flip = random.random()
+            infection_flip = random.random()
+            if person['state'] == "I":
+                if death_flip < die(person):
+                    person['state'] = "D"
+                    D += 1
+                    I -= 1
+                elif removal_flip < a_r(person):
+                    R += 1
+                    I -= 1
+                    person['state'] = "R"
 
-                person.setDead()
-            if person.getState() == "A" or person.getState() == 'I' and random.random() < a_r(person):
-                model_state["A_state_list"].remove(vertex)
-                model_state["R_state_list"].append(vertex)
-            if person.getState() == "A" and random.random() < a_i(person):
-                model_state["A_state_list"].remove(vertex)
-                model_state["I_state_list"].append(vertex)
-            person.contacts[t] = contacts
-        deathCounts = deathCounts + [len(model_state["D_state_list"])]
-        S_counts = S_counts + [len(model_state["S_state_list"])]
-        A_counts = A_counts + [len(model_state["A_state_list"])]
-        I_counts = I_counts + [len(model_state["I_state_list"])]
-        R_counts = R_counts + [len(model_state["R_state_list"])]
-        D_counts = D_counts + [len(model_state["D_state_list"])]
-        policy(model_state)
+            elif person['state'] == 'A':
+                if removal_flip < a_r(person):
+                    R += 1
+                    A -= 1
+                    person['state'] = "R"
+                elif infection_flip < a_i(person):
+                    I += 1
+                    A -= 1
+                    person['state'] = "I"
+
+        D_counts.append(D)
+        S_counts.append(S)
+        A_counts.append(A)
+        I_counts.append(I)
+        R_counts.append(R)
+
+
+
+
+
+        policy(G)
+    return (S_counts, A_counts, I_counts, R_counts, D_counts)
 
 
 
@@ -175,14 +175,69 @@ def simulate(G, model_params, policy):
         policy(model_params, G, t)
     return (s_states, i_states, r_states)
 
-def initialize_state(graph_making_function):
+def initialize_state():
     '''
+            G
+            S
+            A
+            I
+            R
+            D
+            T: timesteps
+            a_i(people_obj): returns a probability that an a node transitions to the I state
+            a_r(people_obj): returns a probability that a node transitions to the R state
+            die(people_obj): returns a probability that this person will die
+            policy : policy function to be performed every epoch/timestep
+    '''
+    G = nx.relaxed_caveman_graph(10, 5, .2)
 
-    :param graph_making_function:
-    :return:
-    '''
+    attributes = {}
+    for node in G.nodes():
+        attributes[node] = {
+            'age' : int(random.normalvariate(38, 13)),
+            'state' : "S",
+            'underlying_condition' : False,
+            'time_infection' : -1,
+            'time_removal' : -1,
+            'contacts' : [],
+            'dead' : False
+        }
+    nx.set_node_attributes(G, attributes)
+
+
+
+    for node in random.sample(G.nodes(), 3):
+        G.nodes[node]["state"] = "I"
+
+    for node in G.nodes():
+        for neighbor in G[node]:
+            G.add_edge(node, neighbor, weight=random.random())
+
+
+
+    T = 25
+    def a_i(person):
+        return 0.2
+    def a_r(person):
+        return 1.0/14.0
+    def die(person):
+        return 0.03
+    def policy(G):
+        return
+
+    lines = simulate_corona(G, 47, 0, 3, 0, 0, T, a_i, a_r, die, policy)
+    time_steps = [i for i in range(T+1)]
+
+    plt.plot(time_steps, lines[0], label="susceptible")
+    plt.plot(time_steps, lines[1], label="asymptomatic")
+    plt.plot(time_steps, lines[2], label="infected")
+    plt.plot(time_steps, lines[3], label="removed")
+    plt.plot(time_steps, lines[4], label="dead")
+    plt.legend()
+    plt.show()
+
 
 if __name__ == "__main__":
 
 
-    G = random_graph(100, 90)
+    initialize_state()
