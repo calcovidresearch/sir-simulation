@@ -2,7 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import random
 import matplotlib.lines as mlines
-
+from numba import jit
 import argparse
 
 def draw_graph(G):
@@ -23,6 +23,7 @@ def random_graph(N, E):
     G = nx.gnm_random_graph(N, E)
     draw_graph(G)
     return nx.convert.to_dict_of_dicts(G)
+
 def show_graph(G, pos):
     mapping = {'S': 'blue', 'I': 'green', 'A': 'orange', 'R': 'red', 'D': 'purple'}
     nodes = G.nodes()
@@ -45,7 +46,7 @@ def show_graph(G, pos):
     plt.pause(.5)
     plt.close()
 
-def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy):
+def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, showGraph = True):
     '''
         Randomly simulate spread of the Coronavirus.
             G
@@ -66,14 +67,17 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy):
     A_counts = [A]
     I_counts = [I]
     R_counts = [R]
-    pos = nx.spring_layout(G, dim=2, k=None, pos=None, fixed=None, iterations=50, weight='weight', scale=1.0)
+    if showGraph:
+        pos = nx.spring_layout(G, dim=2, k=None, pos=None, fixed=None, iterations=50, weight='weight', scale=1.0)
 
     for t in range(1, T+1):
         seen = set()
-        show_graph(G, pos)
+        if showGraph:
+            show_graph(G, pos)
         for node in G.nodes():
 
             person = G.nodes[node]
+            current_contacts = []
             for neighbor in G[node]:
                 if node not in seen:
 
@@ -82,6 +86,8 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy):
                         A+=1
                         S-=1
                         seen.add(neighbor)
+                current_contacts.append(neighbor)
+            person['contacts'].append(current_contacts)
 
             death_flip = random.random()
             removal_flip = random.random()
@@ -116,7 +122,8 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy):
 
 
 
-        policy(G)
+        policy(G, t)
+        print ("    " + str(t) + " timesteps have passed.")
     return (S_counts, A_counts, I_counts, R_counts, D_counts)
 
 
@@ -177,8 +184,7 @@ def simulate(G, model_params, policy):
         r_states.append(model_params['R'])
         policy(model_params, G, t)
     return (s_states, i_states, r_states)
-
-def initialize_state():
+def initialize_state(G, S, A, I, R, D, T):
     '''
             G
             S
@@ -192,9 +198,10 @@ def initialize_state():
             die(people_obj): returns a probability that this person will die
             policy : policy function to be performed every epoch/timestep
     '''
-    G = nx.relaxed_caveman_graph(10, 5, .2)
+
 
     attributes = {}
+    print("Populating the nodes...")
     for node in G.nodes():
         attributes[node] = {
             'age' : int(random.normalvariate(38, 13)),
@@ -205,12 +212,22 @@ def initialize_state():
             'contacts' : [],
             'dead' : False
         }
+
     nx.set_node_attributes(G, attributes)
 
+    i = 0
+    for node in random.sample(G.nodes(), I+A+R+D):
+        if i < I:
+
+            G.nodes[node]["state"] = "I"
+        elif i < A+I:
+            G.nodes[node]["state"] = "A"
+        elif i < A+I+R:
+            G.nodes[node]["state"] = "R"
+        elif i < A+I+D:
+            G.nodes[node]["state"] = "D"
 
 
-    for node in random.sample(G.nodes(), 3):
-        G.nodes[node]["state"] = "I"
 
     for node in G.nodes():
         for neighbor in G[node]:
@@ -218,17 +235,35 @@ def initialize_state():
 
 
 
-    T = 25
+
+
     def a_i(person):
-        return 0.2
+        return 0.5
     def a_r(person):
         return 1.0/14.0
     def die(person):
-        return 0.03
-    def policy(G):
+        if person['age'] > 80:
+            return 0.148
+        elif person['age'] > 70:
+            return 0.08
+        elif person['age'] > 60:
+            return 0.036
+        elif person['age'] > 50:
+            return 0.013
+        elif person['age'] > 40:
+            return 0.004
+        elif person['age'] > 10:
+            return 0.002
+        else:
+            return 0.0
+
+    def policy(G, t):
         return
 
-    lines = simulate_corona(G, 47, 0, 3, 0, 0, T, a_i, a_r, die, policy)
+    print("Done.")
+    print("Simulating...")
+    lines = simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy)
+    print("Done.")
     time_steps = [i for i in range(T+1)]
 
     plt.plot(time_steps, lines[0], label="susceptible")
@@ -240,8 +275,25 @@ def initialize_state():
     plt.show()
 
 
-
 if __name__ == "__main__":
-
-
-    initialize_state()
+    N = 1000
+    print("Creating the relaxed_caveman_graph... ")
+    G = nx.relaxed_caveman_graph(int(N/5), 5, 0.2)
+    print ("Done.")
+    initialize_state(G, N, 0, 100, 0, 0, 25)
+    N = 100
+    print("Creating the windmill_graph... ")
+    G = nx.windmill_graph(50, 2)
+    print ("Done.")
+    initialize_state(G, N, 0, 3, 0, 0, 25)
+    N = 34
+    print("Creating the karate_club_graph... ")
+    G = nx.karate_club_graph()
+    print ("Done.")
+    initialize_state(G, N, 0, 1, 0, 0, 25)
+    N = 32
+    print("Creating the davis_southern_women_graph... ")
+    G = nx.davis_southern_women_graph()
+    print (len(G.nodes()))
+    print ("Done.")
+    initialize_state(G, N, 0, 1, 0, 0, 25)
