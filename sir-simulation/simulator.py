@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import networkx as nx
 import matplotlib.pyplot as plt
 import random
@@ -46,7 +48,15 @@ def show_graph(G, pos):
     plt.pause(.5)
     plt.close()
 
-def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, showGraph = True):
+def cutoff(G, person):
+    keys = tuple(G.neighbors(person))
+    for contact in keys:
+        G.remove_edges_from([(person, neighbor) for neighbor in G.neighbors(contact)])
+
+
+
+
+def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, tests, showGraph = True):
     '''
         Randomly simulate spread of the Coronavirus.
             G
@@ -72,6 +82,8 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, showGraph = True
 
     for t in range(1, T+1):
         seen = set()
+        testsLeft = tests
+        tested_people = set()
         if showGraph:
             show_graph(G, pos)
         for node in G.nodes():
@@ -82,6 +94,7 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, showGraph = True
                 if node not in seen:
 
                     if G.nodes[neighbor]['state'] =='S' and (person["state"] == "I" or person["state"] == "A") and random.random() < G[node][neighbor]['weight']:
+
                         G.nodes[neighbor]['state'] = 'A'
                         A+=1
                         S-=1
@@ -93,6 +106,9 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, showGraph = True
             removal_flip = random.random()
             infection_flip = random.random()
             if person['state'] == "I":
+                if testsLeft and node not in tested_people:
+                    tested_people.add(node)
+                    cutoff(G, node)
                 if death_flip < die(person):
                     person['state'] = "D"
                     D += 1
@@ -111,6 +127,8 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, showGraph = True
                     I += 1
                     A -= 1
                     person['state'] = "I"
+
+        testsLeft = 500
 
         D_counts.append(D)
         S_counts.append(S)
@@ -184,7 +202,8 @@ def simulate(G, model_params, policy):
         r_states.append(model_params['R'])
         policy(model_params, G, t)
     return (s_states, i_states, r_states)
-def initialize_state(G, S, A, I, R, D, T):
+
+def initialize_state(G, S, A, I, R, D, T, age_function):
     '''
             G
             S
@@ -204,7 +223,7 @@ def initialize_state(G, S, A, I, R, D, T):
     print("Populating the nodes...")
     for node in G.nodes():
         attributes[node] = {
-            'age' : int(random.normalvariate(38, 13)),
+            'age' : age_function(node),
             'state' : "S",
             'underlying_condition' : False,
             'time_infection' : -1,
@@ -262,7 +281,7 @@ def initialize_state(G, S, A, I, R, D, T):
 
     print("Done.")
     print("Simulating...")
-    lines = simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy)
+    lines = simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, 500, showGraph = True)
     print("Done.")
     time_steps = [i for i in range(T+1)]
 
@@ -276,24 +295,71 @@ def initialize_state(G, S, A, I, R, D, T):
 
 
 if __name__ == "__main__":
-    N = 1000
+    # random graph, relaxed caveman 100 clusters with 50 each
+    # Massachusetts nursing homes, 500 nursing homes, nursing home has 100 residents,
+    #                               30 employees each, transmission rate within nursing home,
+    #                               some rate outside
+    #                               500 tests a day, 10 of the nursing homes actually have COVID
+    #                               30-40% in the nursing homes that have them
+    #                               start with 1, 10, 50 groups
+    # print("Creating the nursing_home_graph... ")
+    # l = 500
+    # k = 100
+    # N = l * k + 15000
+    # G = nx.caveman_graph(l, k)
+    # nursing_homes = list(nx.algorithms.find_cliques(G))
+    # worker_id = 50000
+    # # frequencies = {}
+    # print ("Finding workers jobs... ")
+    # for worker in range(50000, 50000+12500):
+    #     home = random.sample(nursing_homes, 1)[0]
+    #     G.add_node(worker)
+    #     # if worker in frequencies:
+    #     #
+    #     #     frequencies[worker] += 1
+    #     # else:
+    #     #     frequencies[worker] = 1
+    #     G.add_edge(worker, home[0])
+    # print("Done.")
+    # print("Finding workers more jobs... ")
+    #
+    # for worker in range(50000, 50000+2500):
+    #     home = random.sample(nursing_homes, 1)[0]
+    #     G.add_node(worker)
+    #     # if worker in frequencies:
+    #     #
+    #     #     frequencies[worker] += 1
+    #     # else:
+    #     #     frequencies[worker] = 1
+    #     G.add_edge(worker, home[0])
+    # print("Done.")
+    def ageFunction(node):
+        if node > 50000:
+            return random.normalvariate(35, 5)
+        return int(random.normalvariate(80, 6.66))
+
+    # print ("Frequencies" + str(frequencies))
+    #
+    # initialize_state(G, N, 0, 100, 0, 0, 25, ageFunction)
+
+    N = 100
     print("Creating the relaxed_caveman_graph... ")
     G = nx.relaxed_caveman_graph(int(N/5), 5, 0.2)
     print ("Done.")
-    initialize_state(G, N, 0, 100, 0, 0, 25)
-    N = 100
-    print("Creating the windmill_graph... ")
-    G = nx.windmill_graph(50, 2)
-    print ("Done.")
-    initialize_state(G, N, 0, 3, 0, 0, 25)
-    N = 34
-    print("Creating the karate_club_graph... ")
-    G = nx.karate_club_graph()
-    print ("Done.")
-    initialize_state(G, N, 0, 1, 0, 0, 25)
-    N = 32
-    print("Creating the davis_southern_women_graph... ")
-    G = nx.davis_southern_women_graph()
-    print (len(G.nodes()))
-    print ("Done.")
-    initialize_state(G, N, 0, 1, 0, 0, 25)
+    initialize_state(G, N, 0, 5, 0, 0, 25, ageFunction)
+    # N = 100
+    # print("Creating the windmill_graph... ")
+    # G = nx.windmill_graph(20, 5)
+    # print ("Done.")
+    # initialize_state(G, N, 0, 3, 0, 0, 25)
+    # N = 34
+    # print("Creating the karate_club_graph... ")
+    # G = nx.karate_club_graph()
+    # print ("Done.")
+    # initialize_state(G, N, 0, 1, 0, 0, 25)
+    # N = 32
+    # print("Creating the davis_southern_women_graph... ")
+    # G = nx.davis_southern_women_graph()
+    # print (len(G.nodes()))
+    # print ("Done.")
+    # initialize_state(G, N, 0, 1, 0, 0, 25)
