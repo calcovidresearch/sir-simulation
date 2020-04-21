@@ -56,7 +56,7 @@ def cutoff(G, person):
 
 
 
-def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, tests, showGraph = True):
+def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, tests, nursing_homes, showGraph = True):
     '''
         Randomly simulate spread of the Coronavirus.
             G
@@ -77,6 +77,7 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, tests, showGraph
     A_counts = [A]
     I_counts = [I]
     R_counts = [R]
+    NH_counts = [0 for i in range(len(nursing_homes))]
     if showGraph:
         pos = nx.spring_layout(G, dim=2, k=None, pos=None, fixed=None, iterations=50, weight='weight', scale=1.0)
 
@@ -127,8 +128,9 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, tests, showGraph
                     I += 1
                     A -= 1
                     person['state'] = "I"
-
-        testsLeft = 500
+                    for i in range(len(nursing_homes)):
+                        if node in home:
+                            NH_counts[i] += 1
 
         D_counts.append(D)
         S_counts.append(S)
@@ -142,7 +144,7 @@ def simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, tests, showGraph
 
         policy(G, t)
         print ("    " + str(t) + " timesteps have passed.")
-    return (S_counts, A_counts, I_counts, R_counts, D_counts)
+    return (S_counts, A_counts, I_counts, R_counts, D_counts, NH_counts)
 
 
 
@@ -203,7 +205,7 @@ def simulate(G, model_params, policy):
         policy(model_params, G, t)
     return (s_states, i_states, r_states)
 
-def initialize_state(G, S, A, I, R, D, T, age_function):
+def initialize_state(G, S, A, I, R, D, T, age_function, nursing_homes, plot_name,text_name):
     '''
             G
             S
@@ -281,7 +283,7 @@ def initialize_state(G, S, A, I, R, D, T, age_function):
 
     print("Done.")
     print("Simulating...")
-    lines = simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, 500, showGraph = True)
+    lines = simulate_corona(G, S, A, I, R, D, T, a_i, a_r, die, policy, 500, nursing_homes, showGraph = False)
     print("Done.")
     time_steps = [i for i in range(T+1)]
 
@@ -291,8 +293,15 @@ def initialize_state(G, S, A, I, R, D, T, age_function):
     plt.plot(time_steps, lines[3], label="removed")
     plt.plot(time_steps, lines[4], label="dead")
     plt.legend()
+    plt.savefig(plot_name)
     plt.show()
-
+    fo = open(text_name,"w")
+    for i in range(5):
+        fo.write(str(lines[i])+"\n")
+    percents = [0 for i in range(len(lines[5]))]
+    for i in range(len(lines[5])):
+        percents[i] = lines[5][i] / len(nursing_homes[i])
+    fo.write(str(percents))
 
 if __name__ == "__main__":
     # random graph, relaxed caveman 100 clusters with 50 each
@@ -302,51 +311,55 @@ if __name__ == "__main__":
     #                               500 tests a day, 10 of the nursing homes actually have COVID
     #                               30-40% in the nursing homes that have them
     #                               start with 1, 10, 50 groups
-    # print("Creating the nursing_home_graph... ")
-    # l = 500
-    # k = 100
-    # N = l * k + 15000
-    # G = nx.caveman_graph(l, k)
-    # nursing_homes = list(nx.algorithms.find_cliques(G))
-    # worker_id = 50000
-    # # frequencies = {}
-    # print ("Finding workers jobs... ")
-    # for worker in range(50000, 50000+12500):
-    #     home = random.sample(nursing_homes, 1)[0]
-    #     G.add_node(worker)
-    #     # if worker in frequencies:
-    #     #
-    #     #     frequencies[worker] += 1
-    #     # else:
-    #     #     frequencies[worker] = 1
-    #     G.add_edge(worker, home[0])
-    # print("Done.")
-    # print("Finding workers more jobs... ")
-    #
-    # for worker in range(50000, 50000+2500):
-    #     home = random.sample(nursing_homes, 1)[0]
-    #     G.add_node(worker)
-    #     # if worker in frequencies:
-    #     #
-    #     #     frequencies[worker] += 1
-    #     # else:
-    #     #     frequencies[worker] = 1
-    #     G.add_edge(worker, home[0])
-    # print("Done.")
-    def ageFunction(node):
-        if node > 50000:
-            return random.normalvariate(35, 5)
-        return int(random.normalvariate(80, 6.66))
+    for simulation_num in range(2,11):
+        print("Creating the nursing_home_graph... ")
+        l = 500
+        k = 100
+        N = l * k + 15000
+        G = nx.caveman_graph(l, k)
+        nursing_homes = [set(i) for i in (nx.algorithms.find_cliques(G))]
+        worker_id = 50000
+        # frequencies = {}
+        print ("Finding workers jobs... ")
+        for worker in range(50000, 50000+12500):
+            home = random.sample(nursing_homes, 1)[0]
+            G.add_node(worker)
+            # if worker in frequencies:
+            #
+            #     frequencies[worker] += 1
+            # else:
+            #     frequencies[worker] = 1
+            G.add_edge(worker, next(iter(home)))
+            home.add(worker)
 
-    # print ("Frequencies" + str(frequencies))
-    #
-    # initialize_state(G, N, 0, 100, 0, 0, 25, ageFunction)
+        print("Done.")
+        print("Finding workers more jobs... ")
 
-    N = 100
-    print("Creating the relaxed_caveman_graph... ")
-    G = nx.relaxed_caveman_graph(int(N/5), 5, 0.2)
-    print ("Done.")
-    initialize_state(G, N, 0, 5, 0, 0, 25, ageFunction)
+        for worker in range(50000, 50000+2500):
+            home = random.sample(nursing_homes, 1)[0]
+            G.add_node(worker)
+            # if worker in frequencies:
+            #
+            #     frequencies[worker] += 1
+            # else:
+            #     frequencies[worker] = 1
+            G.add_edge(worker, next(iter(home)))
+            home.add(worker)
+        print("Done.")
+        def ageFunction(node):
+            if node > 50000:
+                return random.normalvariate(35, 5)
+            return int(random.normalvariate(80, 6.66))
+
+        # print ("Frequencies" + str(frequencies))
+        #
+        initialize_state(G, N, 0, 100, 0, 0, 25, ageFunction, nursing_homes,'nursing_homes_'+str(simulation_num)+'.png','nursing_homes_'+str(simulation_num)+'.txt')
+
+    # N = 100
+    # print("Creating the relaxed_caveman_graph... ")
+    # G = nx.relaxed_caveman_graph(int(N/5), 5, 0.2)
+    # print ("Done.")
+    # initialize_state(G, N, 0, 5, 0, 0, 25, ageFunction)
     # N = 100
     # print("Creating the windmill_graph... ")
     # G = nx.windmill_graph(20, 5)
